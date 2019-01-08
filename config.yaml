@@ -1,0 +1,24 @@
+
+generate:
+  tcga_samples:
+    schema: sample
+    count: 200
+    file: sample.json
+    properties:
+      days_to_collection:
+        method: randint
+        args: [0, 10]
+      current_weight:
+        method: randfloat
+        args: [100, 180]
+      project:
+        method: set
+        args: ["TCGA-BRCA"]
+  tcga_cases:
+    schema: case
+    count: 100
+    file: cases.json
+    properties:
+      submitter_id:
+        method: generate
+        args: ["TCGA-[0-9][0-9]-[A-Z][A-Z][A-Z][A-Z]"]
