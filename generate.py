@@ -18,28 +18,36 @@ def gen_param(id, param):
         elif param['type'] == "string":
             if 'pattern' in param:
                 return rstr.xeger(param['pattern'])
-            print("Not found %s" % (param))
+            print("Not found %s %s" % (id, param))
             return ""
     print("Not found %s %s" % (id, param))
     return None
 
-def gen_config_param(config):
+def gen_random(config, kwds=None):
+    args = config['args']
+    if not isinstance(args, list):
+        args = [args]
     if config["method"] == "randint":
-        return random.randint(*config["args"])
+        return random.randint(*args)
     if config["method"] == "randfloat":
-        args = config["args"]
         return (random.random() * args[1] - args[0]) + args[0]
     if config["method"] == "generate":
-        args = config["args"]
         return rstr.xeger(args[0])
+    if config["method"] == "template":
+        return args[0].format(**kwds)
+    if config["method"] == "template-loop":
+        out = []
+        for i in args[0]:
+            out.append(args[1].format(arg=i, **kwds))
+        return out
     return None
 
-def gen_record(id, schema_map, file_map, config):
-    schema_config = config["generate"][id]
+def gen_record(id, schema_map, file_map, config, variables):
+    schema_config = config["outputs"][id]
     out = {}
-    path = schema_map[config["generate"][id]["schema"]]
+    path = schema_map[config["outputs"][id]["schema"]]
     props = file_map[path]['properties']
-    props_config = config["generate"][id]["properties"]
+    props_config = config["outputs"][id]["properties"]
 
     for k, v in props.items():
         if '$ref' in v:
@@ -50,11 +58,43 @@ def gen_record(id, schema_map, file_map, config):
                     param = file_map[tmp[0]][nid]
                     out[k] = gen_param(k, param)
         elif k in props_config:
-            out[k] = gen_config_param(props_config[k])
+            out[k] = gen_random(props_config[k], variables)
         else:
             out[k] = gen_param(k, v)
     return out
 
+class IDTables:
+
+    def __init__(self, config):
+        self.table_parent = {}
+        self.tables = {}
+        # generate parent id tables
+        for name, tab in config.get("tables", {}).items():
+            if 'count' in tab:
+                o = {}
+                for i in range(tab['count']):
+                    o[gen_random(tab)] = None
+                self.tables[name] = o
+                self.table_parent[name] = None
+
+
+        # generate child id tables
+        added = True
+        while added:
+            added = False
+            for name, tab in config.get("tables", {}).items():
+                if name not in self.tables and 'link' in tab and tab['link'] in self.tables:
+                    added = True
+                    o = {}
+                    for s in self.tables[tab['link']]:
+                        n = gen_random(tab, {tab['link']:s})
+                        if isinstance(n, list):
+                            for i in n:
+                                o[i] = s
+                        else:
+                            o[n] = s
+                    self.tables[name] = o
+                    self.table_parent[name] = tab['link']
 
 if __name__ == "__main__":
 
@@ -74,9 +114,17 @@ if __name__ == "__main__":
         if data.get("$schema", "") == "http://json-schema.org/draft-04/schema#":
             schema_map[data['id']] = fname
 
-    for name, rec in config['generate'].items():
+    idtables = IDTables(config)
+
+    for name, rec in config['outputs'].items():
         with open(rec['file'], "w") as ohandle:
-            for i in range(rec["count"]):
-                d = gen_record(name, schema_map, file_map, config)
-                ohandle.write(json.dumps(d))
-                ohandle.write("\n")
+            if "count" in rec:
+                for i in range(rec["count"]):
+                    d = gen_record(name, schema_map, file_map, config, {})
+                    ohandle.write(json.dumps(d))
+                    ohandle.write("\n")
+            elif "id_table" in rec:
+                for i in idtables.tables[rec['id_table']]:
+                    d = gen_record(name, schema_map, file_map, config, {"id" : i})
+                    ohandle.write(json.dumps(d))
+                    ohandle.write("\n")

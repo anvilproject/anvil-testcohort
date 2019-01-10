@@ -1,10 +1,42 @@
 
-generate:
+tables:
+  cases:
+    count: 100
+    method: generate
+    args: ["TCGA-[0-9][0-9]-[A-Z][A-Z][A-Z][A-Z]"]
+  samples:
+    link: cases
+    multiplicity: many_to_one
+    method: template-loop
+    args:
+      - ["01", "02", "10", "11"]
+      - "{cases}-{arg}"
+  aliquots:
+    link: samples
+    method: template-loop
+    args:
+      - ["1", "2", "3", "4"]
+      - "{samples}-{arg}"
+
+outputs:
+
+  tcga_cases:
+    schema: case
+    id_table: cases
+    file: cases.json
+    properties:
+      submitter_id:
+        method: template
+        args: "{id}"
+
   tcga_samples:
     schema: sample
-    count: 200
+    id_table: samples
     file: sample.json
     properties:
+      submitter_id:
+        method: template
+        args: "{id}"
       days_to_collection:
         method: randint
         args: [0, 10]
@@ -14,11 +46,12 @@ generate:
       project:
         method: set
         args: ["TCGA-BRCA"]
-  tcga_cases:
-    schema: case
-    count: 100
-    file: cases.json
+
+  tcga_aliquots:
+    schema: aliquot
+    id_table: aliquots
+    file: aliquots.json
     properties:
       submitter_id:
-        method: generate
-        args: ["TCGA-[0-9][0-9]-[A-Z][A-Z][A-Z][A-Z]"]
+        method: template
+        args: "{id}"
